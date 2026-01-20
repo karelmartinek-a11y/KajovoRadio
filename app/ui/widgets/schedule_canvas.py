@@ -22,7 +22,7 @@ class ScheduleCanvas(QtWidgets.QWidget):
     This is a deliberately lightweight custom widget that supports:
     - rendering time grid (00:00-24:00)
     - drag&drop 'pin event' at HH:MM
-    - draw stream blocks by mouse drag with snap-to-grid
+    - draw stream blocks by mouse drag with snap-to-grid (primary interaction; no modifier)
 
     It emits high-level signals; MainWindow updates state + drawer.
     """
@@ -227,7 +227,8 @@ class ScheduleCanvas(QtWidgets.QWidget):
 
     # Draw stream blocks
     def mousePressEvent(self, e: QtGui.QMouseEvent) -> None:
-        if e.button() == QtCore.Qt.LeftButton and (e.modifiers() & QtCore.Qt.ShiftModifier):
+        # Stream draw is the primary interaction as per spec; do not require Shift.
+        if e.button() == QtCore.Qt.LeftButton:
             info = self._pos_to_day_and_minute(e.position().toPoint())
             if info:
                 day, minute, _ = info
