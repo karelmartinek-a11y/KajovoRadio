@@ -14,7 +14,8 @@ from app.services.player import AudioPlayer
 
 from app.ui.styles import APP_QSS
 from app.ui.widgets.left_panel import LeftPanel
-from app.ui.widgets.schedule_canvas import ScheduleCanvas
+from app.ui.widgets.schedule_panel import SchedulePanel
+from app.ui.widgets.popovers import SchedulePopover, StreamSelectPopover
 from app.ui.widgets.footer import FooterBar
 from app.ui.widgets.drawer import DrawerPanel
 from app.ui.tabs import AudioFileTab, SpotifyTab, DynamicTextsTab, StreamsTab, SettingsTab
@@ -29,6 +30,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.state = AppState()
         self.player = AudioPlayer()
         self.player.on_track_end = self._on_track_end
+        self._active_popover = None
 
         # Root
         root = QtWidgets.QWidget()
@@ -82,12 +84,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.split = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
 
         self.left_panel = LeftPanel()
-        self.canvas = ScheduleCanvas()
+        self.schedule_panel = SchedulePanel()
+        # convenience handle
+        self.canvas = self.schedule_panel.canvas
         self.drawer = DrawerPanel()
 
         # Right side container: canvas + drawer
         right = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
-        right.addWidget(self.canvas)
+        right.addWidget(self.schedule_panel)
         right.addWidget(self.drawer)
         right.setStretchFactor(0, 4)
         right.setStretchFactor(1, 1)
@@ -139,8 +143,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.left_panel.deleteRequested.connect(self._delete_item)
         self.left_panel.infoRequested.connect(self._show_info)
 
-        self.canvas.eventDropped.connect(self._on_canvas_drop)
-        self.canvas.streamBlockDrawn.connect(self._on_canvas_stream_draw)
+        # Use *_At signals so we can place popovers at the drop/draw location.
+        self.canvas.eventDroppedAt.connect(self._on_canvas_drop_at)
+        self.canvas.streamBlockDrawnAt.connect(self._on_canvas_stream_draw_at)
 
         self.footer.playClicked.connect(self._play)
         self.footer.stopClicked.connect(self._stop)
@@ -334,36 +339,95 @@ class MainWindow(QtWidgets.QMainWindow):
     def _show_info(self, item_type: str, ref_id: str):
         self.drawer.set_content('Info', self._label_for_ref(item_type, ref_id))
 
-    # Canvas planning
-    def _on_canvas_drop(self, day_index: int, hhmm: str, item_type: str, ref_id: str):
+    def _close_active_popover(self) -> None:
+        p = getattr(self, "_active_popover", None)
+        if p is not None:
+            try:
+                p.close()
+            except Exception:
+                pass
+        self._active_popover = None
+
+    def _show_popover(self, pop: QtWidgets.QWidget) -> None:
+        self._close_active_popover()
+        self._active_popover = pop
+        pop.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
+        pop.destroyed.connect(lambda *_: setattr(self, "_active_popover", None))
+        pop.show()
+
+    # Canvas planning (popover flows; no heavy dialogs)
+    def _on_canvas_drop_at(self, day_index: int, hhmm: str, item_type: str, ref_id: str, global_pos: QtCore.QPoint):
         if not self._exists(item_type, ref_id):
             QtWidgets.QMessageBox.warning(self, 'Plán', 'Prvek není v interní databázi aplikace.')
             return
-        self.state.schedule_events.append(ScheduleEvent(
-            id=new_id('ev'),
-            day_index=day_index,
-            time_hhmm=hhmm,
-            item_type=item_type,
-            ref_id=ref_id,
-        ))
-        self._refresh_all()
-        self.drawer.set_content('Naplánováno', f"{hhmm} / {['Po','Út','St','Čt','Pá','So','Ne'][day_index]}\n{self._label_for_ref(item_type, ref_id)}")
+        label = self._label_for_ref(item_type, ref_id)
+        pop = SchedulePopover(
+            title="Naplánovat",
+            subtitle=label,
+            initial_day_index=day_index,
+            initial_hhmm=hhmm,
+            parent=self,
+        )
 
-    def _on_canvas_stream_draw(self, day_index: int, start_hhmm: str, end_hhmm: str):
-        # In the full version, this should open a small panel to select from preselected streams.
+        def _accept(days: list[int], hhmm2: str):
+            # one drag = one time; possibly multiple days
+            for di in days:
+                self.state.schedule_events.append(ScheduleEvent(
+                    id=new_id('ev'),
+                    day_index=di,
+                    time_hhmm=hhmm2,
+                    item_type=item_type,
+                    ref_id=ref_id,
+                ))
+            self._refresh_all()
+            dnames = ['Po','Út','St','Čt','Pá','So','Ne']
+            days_str = ", ".join(dnames[d] for d in days)
+            self.drawer.set_content('Naplánováno', f"{hhmm2} / {days_str}\n{label}")
+            self._close_active_popover()
+
+        def _reject():
+            self._close_active_popover()
+
+        pop.acceptedDaysTime.connect(_accept)
+        pop.rejected.connect(_reject)
+        pop.show_at(global_pos)
+        self._show_popover(pop)
+
+    def _on_canvas_stream_draw_at(self, day_index: int, start_hhmm: str, end_hhmm: str, global_pos: QtCore.QPoint):
         if not self.state.streams:
             QtWidgets.QMessageBox.warning(self, 'Stream', 'Nejsou vybrané žádné streamy v databázi. Nejprve přidej stream do karty STREAMY.')
             return
-        stream = self.state.streams[0]
-        self.state.schedule_stream_blocks.append(ScheduleStreamBlock(
-            id=new_id('sb'),
-            day_index=day_index,
-            start_hhmm=start_hhmm,
-            end_hhmm=end_hhmm,
-            stream_id=stream.id,
-        ))
-        self._refresh_all()
-        self.drawer.set_content('Stream blok', f"{start_hhmm}–{end_hhmm} / {['Po','Út','St','Čt','Pá','So','Ne'][day_index]}\nStream: {stream.name}")
+        streams = [(s.id, s.name) for s in self.state.streams]
+        pop = StreamSelectPopover(
+            title="Vybrat stream",
+            subtitle=f"{start_hhmm}–{end_hhmm} / {['Po','Út','St','Čt','Pá','So','Ne'][day_index]}",
+            streams=streams,
+            parent=self,
+        )
+
+        def _accept(stream_id: str):
+            stream = next((s for s in self.state.streams if s.id == stream_id), None)
+            if not stream:
+                self._close_active_popover()
+                return
+            self.state.schedule_stream_blocks.append(ScheduleStreamBlock(
+                id=new_id('sb'),
+                day_index=day_index,
+                start_hhmm=start_hhmm,
+                end_hhmm=end_hhmm,
+                stream_id=stream.id,
+            ))
+            self._refresh_all()
+            self.drawer.set_content('Stream blok', f"{start_hhmm}–{end_hhmm} / {['Po','Út','St','Čt','Pá','So','Ne'][day_index]}\nStream: {stream.name}")
+            self._close_active_popover()
+
+        def _reject():
+            self._close_active_popover()
+
+        pop.acceptedStream.connect(_accept)
+        pop.rejected.connect(_reject)
+        pop.show_at(global_pos)
+        self._show_popover(pop)
 
     def _exists(self, item_type: str, ref_id: str) -> bool:
         if item_type in ('audiofile', 'spotify'):

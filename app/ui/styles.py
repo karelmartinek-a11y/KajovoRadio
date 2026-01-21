@@ -13,6 +13,8 @@ QMainWindow { background: #0B0D10; }
 /* Panels */
 QFrame#LeftPanel { background: #0F1217; border-right: 1px solid #1A2230; }
 QFrame#FooterBar { background: #0F1217; border-top: 1px solid #1A2230; }
+QFrame#SchedulePanel { background: #0B0D10; }
+#ScheduleToolbar { background: #0F1217; border: 1px solid #1A2230; border-radius: 12px; }
 
 QGroupBox { color: #C8CDD3; border: 1px solid #1A2230; border-radius: 10px; margin-top: 10px; }
 QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 6px; color: #E6E8EB; font-weight: 700; }
@@ -33,6 +35,17 @@ QPushButton#Primary:hover { background: #FFD64C; }
 
 QToolButton { background: #111824; border: 1px solid #1A2230; border-radius: 10px; padding: 6px 10px; color: #E6E8EB; }
 QToolButton:hover { border: 1px solid #2EE6FF; }
+QToolButton:checked { background: #132636; border: 1px solid #2EE6FF; }
+
+/* Schedule toolbar small controls */
+#ScheduleToolbar QLabel { color: #C8CDD3; }
+#ScheduleToolbar QComboBox { background: #111824; border: 1px solid #1A2230; border-radius: 10px; padding: 6px 10px; color: #E6E8EB; }
+#ScheduleToolbar QComboBox:hover { border: 1px solid #2EE6FF; }
+
+/* Popovers */
+#PopoverFrame { background: #0F1217; border: 1px solid #2EE6FF; border-radius: 12px; }
+#PopoverTitle { color: #E6E8EB; font-weight: 700; }
+#PopoverSubtitle { color: #C8CDD3; }
 
 QSlider::groove:horizontal { height: 6px; background: #111824; border-radius: 3px; }
 QSlider::handle:horizontal { width: 14px; margin: -6px 0; border-radius: 7px; background: #2EE6FF; }

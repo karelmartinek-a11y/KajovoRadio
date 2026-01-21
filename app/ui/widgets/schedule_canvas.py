@@ -13,7 +13,8 @@ DAY_NAMES = ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne']
 @dataclass
 class CanvasConfig:
     columns: bool = True  # True=7 columns, False=7 rows
-    zoom_minutes_per_grid: int = 10
+    zoom_minutes_per_grid: int = 10  # used as SNAP (5/10/15)
+    pixels_per_hour: int = 80        # view zoom (scrollable)
 
 
 class ScheduleCanvas(QtWidgets.QWidget):
@@ -29,6 +30,9 @@ class ScheduleCanvas(QtWidgets.QWidget):
 
     eventDropped = QtCore.Signal(int, str, str, str)  # day_index, hhmm, item_type, ref_id
     streamBlockDrawn = QtCore.Signal(int, str, str)   # day_index, start_hhmm, end_hhmm
+    # same as above, but includes a global position for popover placement
+    eventDroppedAt = QtCore.Signal(int, str, str, str, QtCore.QPoint)
+    streamBlockDrawnAt = QtCore.Signal(int, str, str, QtCore.QPoint)
     blockClicked = QtCore.Signal(str, str)            # block_kind ('event'/'stream'), block_id
 
     def __init__(self, parent=None):
@@ -40,6 +44,8 @@ class ScheduleCanvas(QtWidgets.QWidget):
         self._timer = QtCore.QTimer(self)
         self._timer.timeout.connect(self._tick)
         self._timer.start(1000)
+
+        self._update_content_height()
 
         self._events = []  # list of dict for paint
         self._streams = []
@@ -60,8 +66,27 @@ class ScheduleCanvas(QtWidgets.QWidget):
         self.update()
 
     def set_zoom(self, minutes_grid: int):
+        # Back-compat name: this is SNAP grid in minutes.
         self.config.zoom_minutes_per_grid = int(minutes_grid)
         self.update()
+
+    def set_snap_minutes(self, minutes_grid: int):
+        self.set_zoom(minutes_grid)
+
+    def set_view_zoom(self, pixels_per_hour: int):
+        self.config.pixels_per_hour = max(40, int(pixels_per_hour))
+        self._update_content_height()
+
+    def _update_content_height(self):
+        # Make the canvas scrollable by giving it a content height that depends on zoom.
+        base = 60  # header/margins
+        h = self.config.pixels_per_hour * 24 + base
+        self.setMinimumHeight(h)
+        self.updateGeometry()
+        self.update()
+
+    def sizeHint(self) -> QtCore.QSize:
+        return QtCore.QSize(900, self.minimumHeight())
 
     def _tick(self):
         self._now_dt = QtCore.QDateTime.currentDateTime()
@@ -222,6 +247,8 @@ class ScheduleCanvas(QtWidgets.QWidget):
         if len(parts) >= 2:
             item_type, ref_id = parts[0], parts[1]
             hhmm = f"{minute//60:02d}:{minute%60:02d}"
+            gp = self.mapToGlobal(e.position().toPoint())
+            self.eventDroppedAt.emit(day, hhmm, item_type, ref_id, gp)
             self.eventDropped.emit(day, hhmm, item_type, ref_id)
         e.acceptProposedAction()
 
@@ -260,6 +287,8 @@ class ScheduleCanvas(QtWidgets.QWidget):
                 t = s + 10
             start = f"{s//60:02d}:{s%60:02d}"
             end = f"{t//60:02d}:{t%60:02d}"
+            gp = self.mapToGlobal(e.position().toPoint())
+            self.streamBlockDrawnAt.emit(self._draw_day, start, end, gp)
             self.streamBlockDrawn.emit(self._draw_day, start, end)
             self.update()
             return
