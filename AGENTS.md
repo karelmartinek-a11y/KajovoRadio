@@ -1,5 +1,8 @@
 # Repository Guidelines
 
+## Jazyk a dokumentace
+- Veškerá komunikace, dokumentace a poznámky v kódu i u placeholderů musí být výhradně v češtině; narazí-li Codex na poznámky v jiném jazyce, přeloží je do češtiny.
+
 ## Project Structure & Module Organization
 - `app/main.py` and `app/__main__.py` start the desktop app (`python -m app`).
 - `app/ui/` holds Qt windows, tabs, and widgets (`main_window.py`, `tabs.py`, `widgets/`).
@@ -34,3 +37,11 @@
 - Enter API keys for OpenAI/Azure TTS via the **Nastavení** tab; do not hardcode them.
 - Keep `ffmpeg.exe` on `PATH` for reliable playback; document if you ship a pinned binary.
 - If adding new services, centralize IDs in `services/ids.py` and store credentials outside the repo (env vars or Windows Credential Manager).
+
+
+## Kodovani A Cestina
+
+- Vsechny textove soubory, zdrojove kody, konfigurace, prompty, dokumentace a poznamky se musi vytvaret a upravovat v `UTF-8 bez BOM`.
+- Pokud uzivatel vyslovne neurci jinak, komunikace s uzivatelem musi byt v cestine.
+- Dokumentace se musi psat v cestine.
+- Poznamky a komentare v kodu se musi psat v cestine.
